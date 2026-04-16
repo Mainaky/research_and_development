@@ -7,24 +7,8 @@ import numpy as np
 import tensorflow as tf
 
 class CropDiseasePipeline:
-    def __init__(self, crop_model_path, rice_model_path, wheat_model_path, rice_labels, wheat_labels):
+    def __init__(self, rice_model_path, wheat_model_path, rice_labels, wheat_labels):
         print("--- Initializing Pipeline ---")
-        
-        checkpoint = torch.load(crop_model_path, map_location="cpu")
-        self.crop_classes = checkpoint["classes"]
-        
-        self.pytorch_model = torch_models.resnet18(weights=None)
-        num_ftrs = self.pytorch_model.fc.in_features
-        self.pytorch_model.fc = nn.Linear(num_ftrs, len(self.crop_classes))
-        self.pytorch_model.load_state_dict(checkpoint["model_state"])
-        self.pytorch_model.eval()
-        
-        self.py_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406],
-                                 [0.229, 0.224, 0.225])
-        ])
 
         self.rice_model = tf.keras.models.load_model(rice_model_path)
         self.wheat_model = tf.keras.models.load_model(wheat_model_path)
@@ -32,7 +16,12 @@ class CropDiseasePipeline:
         self.rice_labels = rice_labels
         self.wheat_labels = wheat_labels
 
-        print(f"✅ Loaded Crop Classes: {self.crop_classes}")
+        print("✅ Models loaded successfully")
+
+    def _preprocess(self, image):
+        img = image.resize((224, 224))
+        img_array = tf.keras.preprocessing.image.img_to_array(img) / 255.0
+        return np.expand_dims(img_array, axis=0)
 
     def _predict_crop(self, image):
         img_tensor = self.py_transform(image).unsqueeze(0)
@@ -58,33 +47,26 @@ class CropDiseasePipeline:
         return None, 0
     
     def run_inference_image(self, image):
+        img_array = self._preprocess(image)
 
-        crop_name, crop_conf = self._predict_crop(image)
-    
-        if crop_name.lower() == "random":
-            img = image.resize((224, 224))
-            img_array = tf.keras.preprocessing.image.img_to_array(img) / 255.0
-            img_array = np.expand_dims(img_array, axis=0)
-    
-            rice_preds = self.rice_model.predict(img_array, verbose=0)
-            wheat_preds = self.wheat_model.predict(img_array, verbose=0)
-    
-            if np.max(rice_preds) > np.max(wheat_preds):
-                crop_name = "Rice"
-                disease_name = self.rice_labels[np.argmax(rice_preds)]
-                disease_conf = np.max(rice_preds)
-            else:
-                crop_name = "Wheat"
-                disease_name = self.wheat_labels[np.argmax(wheat_preds)]
-                disease_conf = np.max(wheat_preds)
-    
+        rice_preds = self.rice_model.predict(img_array, verbose=0)
+        wheat_preds = self.wheat_model.predict(img_array, verbose=0)
+
+        rice_conf = np.max(rice_preds)
+        wheat_conf = np.max(wheat_preds)
+
+        if rice_conf > wheat_conf:
+            crop_name = "Rice"
+            disease_name = self.rice_labels[np.argmax(rice_preds)]
+            disease_conf = rice_conf
         else:
-            disease_name, disease_conf = self._predict_disease(image, crop_name)
-    
+            crop_name = "Wheat"
+            disease_name = self.wheat_labels[np.argmax(wheat_preds)]
+            disease_conf = wheat_conf
+
         return {
             "status": "Success",
             "crop": crop_name,
-            "crop_confidence": f"{crop_conf:.2%}",
             "disease": disease_name,
             "disease_confidence": f"{disease_conf:.2%}"
         }

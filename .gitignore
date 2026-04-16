@@ -1,2 +1,5 @@
-Rice
-wheat
+__pycache__/
+*.pyc
+*.pyo
+.git
+.env

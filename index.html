@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Crop Health & Yield Predictor</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      text-align: center;
+      padding: 30px;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: auto;
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 5px;
+      border: none;
+    }
+
+    button {
+      background: #22c55e;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .result {
+      margin-top: 20px;
+      background: #020617;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: left;
+    }
+
+    img {
+      max-width: 100%;
+      margin-top: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>🌾 Crop Health & Yield Predictor</h2>
+
+  <!-- Image -->
+  <input type="file" id="imageInput" accept="image/*" onchange="previewImage(event)">
+  <img id="preview" style="display:none;" />
+
+  <!-- Inputs -->
+  <select id="crop_type">
+    <option value="1">Rice</option>
+    <option value="2">Wheat</option>
+    <option value="3">Other</option>
+  </select>
+
+  <input type="number" id="soil_moisture" placeholder="Soil Moisture (%)">
+  <input type="number" id="soil_pH" placeholder="Soil pH">
+  <input type="number" id="temperature" placeholder="Temperature (°C)">
+  <input type="number" id="rainfall" placeholder="Rainfall (mm)">
+  <input type="number" id="humidity" placeholder="Humidity (%)">
+  <input type="number" id="N" placeholder="Nitrogen (N)">
+  <input type="number" id="P" placeholder="Phosphorus (P)">
+  <input type="number" id="K" placeholder="Potassium (K)">
+
+  <button onclick="predict()">Predict</button>
+
+  <div id="status"></div>
+  <div id="resultBox" class="result" style="display:none;"></div>
+</div>
+
+<script>
+
+function previewImage(event) {
+  const img = document.getElementById("preview");
+  img.src = URL.createObjectURL(event.target.files[0]);
+  img.style.display = "block";
+}
+
+async function predict() {
+
+  const status = document.getElementById("status");
+  const resultBox = document.getElementById("resultBox");
+
+  try {
+    status.innerHTML = "🔄 Processing...";
+
+    // ===============================
+    // 🔥 STEP 1: Disease API
+    // ===============================
+    const file = document.getElementById("imageInput").files[0];
+
+    if (!file) {
+      alert("Upload image first");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const diseaseRes = await fetch(
+      "https://concur-bagged-patio.ngrok-free.dev/predict/",
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+
+    const diseaseData = await diseaseRes.json();
+
+    const severity = diseaseData.severity;
+
+    // ===============================
+    // 🔥 STEP 2: Collect user inputs
+    // ===============================
+    const features = [
+      Number(document.getElementById("crop_type").value),
+      Number(document.getElementById("soil_moisture").value),
+      Number(document.getElementById("soil_pH").value),
+      Number(document.getElementById("temperature").value),
+      Number(document.getElementById("rainfall").value),
+      Number(document.getElementById("humidity").value),
+      Number(document.getElementById("N").value),
+      Number(document.getElementById("P").value),
+      Number(document.getElementById("K").value),
+      severity
+    ];
+
+    console.log("Features:", features);
+
+    // ===============================
+    // 🔥 STEP 3: Yield API
+    // ===============================
+    const yieldRes = await fetch(
+      "https://responses-beats-librarian-mountains.trycloudflare.com/predict/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ features })
+      }
+    );
+
+    const yieldData = await yieldRes.json();
+
+    // ===============================
+    // 🔥 FINAL OUTPUT
+    // ===============================
+    resultBox.style.display = "block";
+
+    resultBox.innerHTML = `
+      <h3>🌱 Results</h3>
+      <p><b>Crop:</b> ${diseaseData.crop}</p>
+      <p><b>Disease:</b> ${diseaseData.disease}</p>
+      <p><b>Severity:</b> ${severity}</p>
+      <hr>
+      <p><b>🌾 Yield:</b> ${yieldData.predicted_yield.toFixed(2)} kg/hectare</p>
+    `;
+
+    status.innerHTML = "✅ Done";
+
+  } catch (err) {
+    console.error(err);
+    status.innerHTML = "❌ Error: " + err.message;
+  }
+}
+
+</script>
+
+</body>
+</html>
