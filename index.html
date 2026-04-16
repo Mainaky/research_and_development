@@ -85,10 +85,33 @@
 
 <script>
 
+// 🔥 Preview image
 function previewImage(event) {
   const img = document.getElementById("preview");
   img.src = URL.createObjectURL(event.target.files[0]);
   img.style.display = "block";
+}
+
+// 🔥 Healthy adjustment logic
+function adjustForHealthy(diseaseData, predictedYield) {
+
+  const disease = diseaseData.disease.toLowerCase();
+
+  const isHealthy =
+    disease.includes("healthy rice leaf") ||
+    disease === "healthy";
+
+  if (isHealthy) {
+    return {
+      severity: 0,                    // ✅ force 0
+      yield: predictedYield * 1.15    // ✅ boost yield (15%)
+    };
+  }
+
+  return {
+    severity: diseaseData.severity,
+    yield: predictedYield
+  };
 }
 
 async function predict() {
@@ -122,11 +145,11 @@ async function predict() {
 
     const diseaseData = await diseaseRes.json();
 
-    const severity = diseaseData.severity;
+    // ===============================
+    // 🔥 STEP 2: Collect inputs
+    // ===============================
+    const rawSeverity = diseaseData.severity;
 
-    // ===============================
-    // 🔥 STEP 2: Collect user inputs
-    // ===============================
     const features = [
       Number(document.getElementById("crop_type").value),
       Number(document.getElementById("soil_moisture").value),
@@ -137,7 +160,7 @@ async function predict() {
       Number(document.getElementById("N").value),
       Number(document.getElementById("P").value),
       Number(document.getElementById("K").value),
-      severity
+      rawSeverity   // still send original
     ];
 
     console.log("Features:", features);
@@ -146,7 +169,7 @@ async function predict() {
     // 🔥 STEP 3: Yield API
     // ===============================
     const yieldRes = await fetch(
-      "https://vid-mill-vehicles-amenities.trycloudflare.com/predict/",
+      "https://fig-consecutive-glenn-purchase.trycloudflare.com/predict/",
       {
         method: "POST",
         headers: {
@@ -159,6 +182,11 @@ async function predict() {
     const yieldData = await yieldRes.json();
 
     // ===============================
+    // 🔥 STEP 4: Apply Healthy Logic
+    // ===============================
+    const adjusted = adjustForHealthy(diseaseData, yieldData.predicted_yield);
+
+    // ===============================
     // 🔥 FINAL OUTPUT
     // ===============================
     resultBox.style.display = "block";
@@ -167,9 +195,9 @@ async function predict() {
       <h3>🌱 Results</h3>
       <p><b>Crop:</b> ${diseaseData.crop}</p>
       <p><b>Disease:</b> ${diseaseData.disease}</p>
-      <p><b>Severity:</b> ${severity}</p>
+      <p><b>Severity:</b> ${adjusted.severity}</p>
       <hr>
-      <p><b>🌾 Yield:</b> ${yieldData.predicted_yield.toFixed(2)} kg/hectare</p>
+      <p><b>🌾 Yield:</b> ${adjusted.yield.toFixed(2)} kg/hectare</p>
     `;
 
     status.innerHTML = "✅ Done";
